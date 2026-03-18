@@ -1,4 +1,3 @@
-# LovelyRepo
 <!DOCTYPE html>
 <html lang="en-US">
 
@@ -7,7 +6,7 @@
         <title>i love by Tommy!</title>
         <style>
             body {
-                background-image: url("/Users/thomasglennon/Downloads/the_tucker.jpeg");
+                background-image: url("the_tucker.jpeg");
                 background-repeat: no-repeat;
                 background-attachment: fixed;
                 background-size: 100% 100%;
@@ -31,11 +30,11 @@
 
         <!--Trying out some audio!-->
         <audio controls autoplay>
-            <source src="/Users/thomasglennon/Downloads/monlaferte_primaveral.mp3" type="audio/mpeg">
+            <source src="monlaferte_primaveral.mp3" type="audio/mpeg">
              Your browser does not support the audio element.
         </audio>
         <p>OMG! You know what would go great with some web surfin'? A little Dog</p>
-        <img style="border-radius: 25px;" src="/Users/thomasglennon/Downloads/33ff3c6320914523ebce2310c948e3e6.jpg" alt="This picture! breath taking" width="500" height="500">
+        <img style="border-radius: 25px;" src="33ff3c6320914523ebce2310c948e3e6.jpg" alt="This picture! breath taking" width="500" height="500">
 
         <p style="color:red;">That was so cool. I wont kill myself EVER.</p>
 
@@ -87,7 +86,7 @@
             </strong>
         </b>
 
-        <img src="/Users/thomasglennon/Downloads/dolphin-jumping-kp-637142556.jpg" alt="Incredible picture of this dolphin?" width="850" height="400">
+        <img src="dolphin-jumping-kp-637142556.jpg" alt="Incredible picture of this dolphin?" width="850" height="400">
 
         <b>
             I Speak in english and
