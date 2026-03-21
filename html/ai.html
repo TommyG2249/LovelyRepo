@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audio Speed Changer</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+
+    .card {
+      background: #16213e;
+      border-radius: 16px;
+      padding: 2rem;
+      width: 380px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+    }
+
+    h1 { font-size: 1.4rem; margin-bottom: 1.5rem; color: #e94560; }
+
+    label { display: block; margin-bottom: 0.4rem; font-size: 0.85rem; color: #aaa; }
+
+    input[type="file"] {
+      width: 100%;
+      padding: 0.6rem;
+      background: #0f3460;
+      border: 1px solid #e94560;
+      border-radius: 8px;
+      color: #eee;
+      margin-bottom: 1.2rem;
+      cursor: pointer;
+    }
+
+    .slider-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      margin-bottom: 1.2rem;
+    }
+
+    input[type="range"] {
+      flex: 1;
+      accent-color: #e94560;
+    }
+
+    #speedDisplay {
+      min-width: 3.5rem;
+      text-align: right;
+      font-weight: bold;
+      color: #e94560;
+    }
+
+    button {
+      width: 100%;
+      padding: 0.75rem;
+      background: #e94560;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 1rem;
+      cursor: pointer;
+      margin-bottom: 0.75rem;
+      transition: background 0.2s;
+    }
+
+    button:hover { background: #c73652; }
+    button:disabled { background: #555; cursor: not-allowed; }
+
+    audio {
+      width: 100%;
+      margin-bottom: 0.75rem;
+      border-radius: 8px;
+    }
+
+    #downloadBtn {
+      background: #0f3460;
+      border: 1px solid #e94560;
+    }
+    #downloadBtn:hover { background: #1a4a8a; }
+
+    #status {
+      font-size: 0.8rem;
+      color: #aaa;
+      text-align: center;
+      min-height: 1.2rem;
+    }
+  </style>
+</head>
+<body>
+<div class="card">
+  <h1>🎵 Audio Speed Changer</h1>
+
+  <label>Audio File</label>
+  <input type="file" id="fileInput" accept="audio/*">
+
+  <label>Speed: <span id="speedDisplay">1.00x</span></label>
+  <div class="slider-row">
+    <span>0.25x</span>
+    <input type="range" id="speedSlider" min="0.25" max="4.0" step="0.05" value="1.0">
+    <span>4x</span>
+  </div>
+
+  <button id="processBtn" disabled>Process Audio</button>
+
+  <audio id="audioPlayer" controls style="display:none"></audio>
+  <button id="downloadBtn" style="display:none">⬇ Download</button>
+
+  <div id="status">Load a file to get started</div>
+</div>
+
+<script>
+  const fileInput    = document.getElementById('fileInput');
+  const speedSlider  = document.getElementById('speedSlider');
+  const speedDisplay = document.getElementById('speedDisplay');
+  const processBtn   = document.getElementById('processBtn');
+  const audioPlayer  = document.getElementById('audioPlayer');
+  const downloadBtn  = document.getElementById('downloadBtn');
+  const status       = document.getElementById('status');
+
+  let audioBuffer = null;
+  let outputBlob  = null;
+
+  // Update speed label
+  speedSlider.addEventListener('input', () => {
+    speedDisplay.textContent = parseFloat(speedSlider.value).toFixed(2) + 'x';
+  });
+
+  // Load file into AudioContext buffer
+  fileInput.addEventListener('change', async () => {
+    const file = fileInput.files[0];
+    if (!file) return;
+
+    status.textContent = 'Decoding audio...';
+    processBtn.disabled = true;
+
+    const arrayBuffer = await file.arrayBuffer();
+    const audioCtx = new AudioContext();
+    audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+    await audioCtx.close();
+
+    status.textContent = `Loaded: ${file.name} (${audioBuffer.duration.toFixed(1)}s)`;
+    processBtn.disabled = false;
+  });
+
+  // Resample = speed change (same algorithm as the C++ version!)
+  processBtn.addEventListener('click', () => {
+    if (!audioBuffer) return;
+
+    const speed      = parseFloat(speedSlider.value);
+    const channels   = audioBuffer.numberOfChannels;
+    const sampleRate = audioBuffer.sampleRate;
+    const inputLen   = audioBuffer.length;
+    const outputLen  = Math.ceil(inputLen / speed);
+
+    status.textContent = 'Processing...';
+    processBtn.disabled = true;
+
+    // Use setTimeout so the UI updates before the heavy work
+    setTimeout(() => {
+      const offlineCtx = new OfflineAudioContext(channels, outputLen, sampleRate);
+
+      // Pull raw PCM for each channel
+      const inputData = [];
+      for (let c = 0; c < channels; c++) {
+        inputData.push(audioBuffer.getChannelData(c));
+      }
+
+      // Linear interpolation resample — mirrors the C++ logic exactly
+      const outputData = [];
+      for (let c = 0; c < channels; c++) {
+        const out = new Float32Array(outputLen);
+        for (let i = 0; i < outputLen; i++) {
+          const srcPos = i * speed;
+          const i0     = Math.floor(srcPos);
+          const i1     = Math.min(i0 + 1, inputLen - 1);
+          const frac   = srcPos - i0;
+          out[i] = inputData[c][i0] + frac * (inputData[c][i1] - inputData[c][i0]);
+        }
+        outputData.push(out);
+      }
+
+      // Pack into an AudioBuffer and encode to WAV
+      const outBuffer = offlineCtx.createBuffer(channels, outputLen, sampleRate);
+      for (let c = 0; c < channels; c++) outBuffer.copyToChannel(outputData[c], c);
+
+      outputBlob = audioBufferToWav(outBuffer);
+      const url  = URL.createObjectURL(outputBlob);
+
+      audioPlayer.src = url;
+      audioPlayer.style.display = 'block';
+      downloadBtn.style.display = 'block';
+      downloadBtn.onclick = () => {
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `output_${speed}x.wav`;
+        a.click();
+      };
+
+      const newDur = (audioBuffer.duration / speed).toFixed(1);
+      status.textContent = `Done! New duration: ${newDur}s`;
+      processBtn.disabled = false;
+    }, 50);
+  });
+
+  // --- WAV encoder ---
+  function audioBufferToWav(buffer) {
+    const numCh     = buffer.numberOfChannels;
+    const numFrames = buffer.length;
+    const sampleRate = buffer.sampleRate;
+    const bytesPerSample = 2; // 16-bit PCM
+    const dataSize  = numFrames * numCh * bytesPerSample;
+    const wavBuffer = new ArrayBuffer(44 + dataSize);
+    const view      = new DataView(wavBuffer);
+
+    // RIFF header
+    writeStr(view, 0,  'RIFF');
+    view.setUint32(4,  36 + dataSize, true);
+    writeStr(view, 8,  'WAVE');
+    writeStr(view, 12, 'fmt ');
+    view.setUint32(16, 16, true);           // chunk size
+    view.setUint16(20, 1,  true);           // PCM format
+    view.setUint16(22, numCh, true);
+    view.setUint32(24, sampleRate, true);
+    view.setUint32(28, sampleRate * numCh * bytesPerSample, true); // byte rate
+    view.setUint16(32, numCh * bytesPerSample, true);              // block align
+    view.setUint16(34, 16, true);           // bits per sample
+    writeStr(view, 36, 'data');
+    view.setUint32(40, dataSize, true);
+
+    // Interleave channels and convert float → int16
+    let offset = 44;
+    for (let i = 0; i < numFrames; i++) {
+      for (let c = 0; c < numCh; c++) {
+        const sample = Math.max(-1, Math.min(1, buffer.getChannelData(c)[i]));
+        view.setInt16(offset, sample < 0 ? sample * 0x8000 : sample * 0x7FFF, true);
+        offset += 2;
+      }
+    }
+
+    return new Blob([wavBuffer], { type: 'audio/wav' });
+  }
+
+  function writeStr(view, offset, str) {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i));
+  }
+</script>
+</body>
+</html>
